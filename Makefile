@@ -1,4 +1,9 @@
 
+# atmega328 are have CKDIV8 fuse set by default from the factory.
+# you can run this to program that fuse and make things 8 times faster:
+#
+#     avrdude -c atmelice_isp -p m328p -U lfuse:w:0xE2:m
+
 flash-write: blink.hex
 	avrdude -B 4Mhz -c atmelice_isp -p m328p -U flash:w:eink-heltec.hex:i
 
