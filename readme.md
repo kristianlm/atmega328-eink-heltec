@@ -30,3 +30,10 @@ should really not be that hard!
 
 It was surprisingly hard to find a working startup sequence. I couldn't get the
 [official](https://github.com/HelTecAutomation/e-ink/) AVR HelTec code to work.
+
+start   23:25:45
+etter   13:00:00 
+klokken 13:30:00
+faktisk tid  9.9t
+målt tid    13.0t 
+dvs: WDT går i 113% hastiget av normal klokketid
