@@ -6,6 +6,7 @@
 #include <avr/wdt.h>
 #include <avr/interrupt.h>
 
+extern const uint8_t Font_Table[] PROGMEM; // from font8.c
 
 void uart_wait() {
   while(!(UCSR0A & (1 << UDRE0)));
@@ -68,11 +69,11 @@ void print_pind() {
 /*   ADMUX &= ~(ADMUX_REFMASK | ADMUX_ADCMASK); */
 /*   ADMUX |= ADMUX_REF_AVCC;      // select AVCC as reference */
 /*   ADMUX |= ADMUX_ADC_VBG;       // measure bandgap reference voltage */
- 
+
 /*   _delay_us(500);               // a delay rather than a dummy measurement is needed to give a stable reading! */
 /*   ADCSRA |= (1 << ADSC);        // start conversion */
 /*   while (ADCSRA & (1 << ADSC)); // wait to finish */
- 
+
 /*   return (1100UL*1023/ADC);     // AVcc = Vbg/ADC*1023 = 1.1V*1023/ADC */
 /* } */
 
@@ -88,7 +89,7 @@ uint16_t ivr_measure() {
   _delay_us(500); // let things settle for more stable voltage reading
   ADCSRA |= (1 << ADSC);
   while (ADCSRA & (1 << ADSC));
- 
+
   uint16_t v = (1100UL*1023/ADC);
   ADCSRA &= ~(1 << ADEN); // turn off ADC to save power
   return v;
@@ -148,7 +149,7 @@ void system_sleep() {
   //MCUCR = 1<<(BODS);        // this must be done within 4 clock cycles of above
   sei();             // guarantees next instruction executed
   sleep_cpu ();              // sleep within 3 clock cycles of above
-  sleep_disable(); // System continues execution here when watchdog timed out 
+  sleep_disable(); // System continues execution here when watchdog timed out
   ADCSRA = 1; // switch Analog to Digitalconverter ON
 }
 // ================================================================================
@@ -204,6 +205,108 @@ uint8_t history_getpixel(uint8_t x, uint8_t y, uint8_t w, uint8_t h) {
   return result;
 }
 
+
+int glyphv_getpixel(uint8_t x, uint8_t y, uint8_t ch) {
+  //if(x >= 35*6) return 0;
+  if(x >= 5) return 0;
+  if(y >= 8) return 0;
+  uint16_t letteroffset = 5 * ch;
+  uint8_t col = y;
+  uint8_t row = x;
+  uint8_t* offset = ((uint8_t*)Font_Table) + (letteroffset) + row;
+  uint8_t pixel = pgm_read_byte(offset);
+  return ((pixel) >> (col)) & 0x01;
+}
+
+// find out which digit is shown for x,y and get the corresponding
+// glyph's pixel
+uint8_t numberpixel(uint8_t x, uint8_t y, int16_t val) {
+  uint8_t isneg = val < 0;
+  if(isneg) {
+    //x -= 4; // give room for minus-sign
+    val = -val;
+  }
+  uint8_t ch;
+  uint8_t digit = x/6;
+  if(digit == 0) {
+    ch = isneg ? '-' : '+';
+  }
+  else {
+    digit--;
+    if(digit > 4) return 0;
+    for(int i = 0 ; i < 4-digit ; i++) {
+      val /= 10;
+    }
+    val %= 10;
+    ch = val+'0';
+  }
+  return glyphv_getpixel(x%6, y, ch);
+}
+
+uint8_t getpixel(uint8_t x, uint8_t y, int16_t dC, int16_t v) {
+  int color = 0;
+  int histwidth = HISTORY_SIZE; // 1:1 pixel for our 114 datapoints for beauty
+  if(x < 12) { // number scale
+    uint8_t digit = (x)/6;
+    uint8_t hh = 10;
+    uint8_t hi = 1;
+    if(y < 18) {
+      color = digit == 0
+        ? glyphv_getpixel(x-1-00, y-1*hh-hi, '3')
+        : glyphv_getpixel(x-1-06, y-1*hh-hi, '0');
+    }
+    else if(y < 38) {
+      color = digit == 0
+        ? glyphv_getpixel(x-1-00, y-3*hh-hi, '2')
+        : glyphv_getpixel(x-1-06, y-3*hh-hi, '0');
+    }
+    else if(y < 58) {
+      color = digit == 0
+        ? glyphv_getpixel(x-1-00, y-5*hh-hi, '1')
+        : glyphv_getpixel(x-1-06, y-5*hh-hi, '0');
+    }
+    else if(y < 78) {
+      color = digit == 0
+        ? glyphv_getpixel(x-1-00, y-7*hh-hi, ' ')
+        : glyphv_getpixel(x-1-06, y-7*hh-hi, '0');
+    }
+    else if(y < 98) {
+      if(x < 2) { // poor man's minus sign
+        color = (y == 94) ? 1 : 0;
+      }
+      else {
+        color = digit == 0
+          ? glyphv_getpixel(x-1-00, y-9*hh-hi, '1')
+          : glyphv_getpixel(x-1-06, y-9*hh-hi, '0');
+      }
+    }
+  }
+  else if(x == 12) color = 0; // margin
+  else if(x < histwidth+13) color = !history_getpixel(x-13, y, histwidth, 104); // chart
+  else if(x == histwidth+13) color = 0; // another margin
+  else { // digits for current temperature and voltage
+    uint8_t xoff = histwidth+14;
+    y -= 11;
+    if(x-xoff < 6*6) {
+      //xoff+=9;
+      if(y < 10) color = numberpixel(x-xoff, y-00, dC);
+      else       color = numberpixel(x-xoff, y-10, v);
+    }
+    else {
+      xoff+=6*6 + 2;
+      if(y < 10) {
+        if(x-xoff<6) color = glyphv_getpixel(x-xoff-0, y-00, 'd');
+        else         color = glyphv_getpixel(x-xoff-6, y-00, 'C');
+      }
+      else {
+        if(x-xoff<6) color = glyphv_getpixel(x-xoff-0, y-10, 'm');
+        else         color = glyphv_getpixel(x-xoff-6, y-10, 'V');
+      }
+    }
+  }
+  return !color;
+}
+
 // ================================================================================
 
 #define SPI_SET_SS			PORTB |=  (1 << PORTB2)
@@ -224,7 +327,7 @@ void spi_init(void) {
 
 void spi_send(uint8_t data) {
   SPI_LOWER_SS; // indicate start of SPI byte transfer to SPI slave
-  
+
   _ON(C, 1); // my indicator led
   {
     SPDR = data;
@@ -237,18 +340,18 @@ void spi_send(uint8_t data) {
 void epdRefreshWait() {
   DDRB &= ~(1<<DDB1); // PD7 as input
   PORTB &= ~(1<<PB1);
-  
+
   for(int i = 0 ; i < 10 ; i++) {
     uart_putc('_');
     _delay_ms(100);
   }
   uart_putc('t'); print_pind();
-  
+
   while((PINB & 1<<PB1) == 0) { //(PINB & (1<<PB1) != 0) { // pulled low by eink module => busy
     uart_putc('!');
-    _ON(C, 0);  _delay_ms(5); _OFF(C, 0); _delay_ms(50);
-    _ON(C, 0);  _delay_ms(5); _OFF(C, 0); _delay_ms(50);
-    _ON(C, 0);  _delay_ms(5); _OFF(C, 0); _delay_ms(50);
+    _ON(B, 6);  _delay_ms(5); _OFF(B, 6); _delay_ms(50);
+    _ON(B, 6);  _delay_ms(5); _OFF(B, 6); _delay_ms(50);
+    _ON(B, 6);  _delay_ms(5); _OFF(B, 6); _delay_ms(50);
     system_sleep();
   }
   _delay_ms(100);
@@ -267,8 +370,8 @@ void sendData(unsigned char data) {
 #define PA1 _delay_ms(120);
 #define PA3 PA1; PA1; PA1;
 #define PAL PA3; PA3;
-#define DIH _ON(C,0);  PA1; _OFF(C,0); PA1;
-#define DAH _ON(C,0);  PA3; _OFF(C,0); PA1;
+#define DIH _ON(B, 6);  PA1; _OFF(B, 6); PA1;
+#define DAH _ON(B, 6);  PA3; _OFF(B, 6); PA1;
 
 #define mI DIH; DIH; PAL;
 #define mK DAH; DIH; DAH; PAL;
@@ -326,7 +429,7 @@ void epdOff() {
   uart_putc('f');
   uart_putc('f');
   uart_putc(' ');
-  
+
   sendCommand(0X50); // vcom and data interval
   sendData(0x07); // data sheet says default is: 0xd7, stm32 sample code says 0x77
 
@@ -336,7 +439,6 @@ void epdOff() {
   uart_putc(')');
 }
 
-extern const uint8_t Font_Table[] PROGMEM;
 uint8_t charmap[13][35] = {};
 
 void timer_get(uint8_t *hr, uint8_t *min, uint8_t *sec) {
@@ -367,13 +469,13 @@ void epdRedrawConsole() {
   epdRefresh(); // issue display update (this should take BUSY high for about 5s)
 }
 
-void epdRedraw() {
+void epdRedraw(int16_t ddeg, int16_t mV) {
   sendCommand(0x10); // start data transmission 1 (black/white)
   for(int x = 0 ; x < 212 ; x++) {
     for(int y = 0 ; y < 13 ; y++) {
       uint8_t b = 0;
       for(uint8_t bb = 0 ; bb < 8 ; bb++) {
-        b = (b<<1) | history_getpixel(x, 104-((y*8)+bb), 212,104);
+        b = (b<<1) | getpixel(x, 104-((y*8)+bb), ddeg, mV);
       }
       sendData(b);
     }
@@ -401,14 +503,16 @@ void charmap_putc(uint8_t c) {
   }
 }
 
-void peripheral_init() {
+void peripheral_on() {
   PORTC |= 1<<PC5;
   DDRC  |= 1<<DDC5;
   PORTC &= ~(1<<PC3);
   DDRC  |= 1<<DDC3;
-  //_ON(C, 5); // tmp36's Vs
-  //DDRC &= ~(1<<PC4); // tmp26' Vout
-  //_OFF(C, 3); // tmp36's GND
+}
+
+void peripheral_off() {
+  PORTC &= ~(1<<PC5);
+  DDRC  &= ~(1<<DDC5);
 }
 
 void main() {
@@ -426,14 +530,12 @@ void main() {
 
   DIH; DIH; DIH; // indicate something is happening
   uart_init(9600);
-  
+
   /*   DDRB =      (1<<DDB2)|(1<<DDB3)|(1<<DDB5); */
   /* while(1) { */
   /*   SPI_SET_SS; uart_putc('k'); _delay_ms(1000); */
   /*   SPI_LOWER_SS; uart_putc('K'); _delay_ms(1000); */
   /* }; */
-
-  peripheral_init();
 
   /* for(int x = 0 ; x < 80 ; x++) { */
   /*   for(int y = 0 ; y < 30 ; y++) { */
@@ -443,19 +545,19 @@ void main() {
   /*   uart_putc('\r'); */
   /*   uart_putc('\n'); */
   /* } */
-  
+
   /* while(1) { */
   /*   //uart_putc((PINC>>PC4) + '0'); */
-  /*   _ON(C, 0); _delay_ms(4); */
-  /*   _OFF(C, 0); _delay_ms(400); */
+  /*   _ON(B, 6); _delay_ms(4); */
+  /*   _OFF(B, 6); _delay_ms(400); */
   /* } */
 
   /* // fill screen with our alphabet */
   /* for(int i = 0 ; i < 256 ; i++) { */
   /*   *(charmap[5] + i) = (uint8_t)i; */
   /* } */
-  
-  
+
+
   set_sleep_mode(SLEEP_MODE_PWR_DOWN);
   setup_watchdog(); // triggers interrupt, easy (but inaccurate clock)
   sei();
@@ -466,16 +568,16 @@ void main() {
 
   while(1) {
     ww++;
-    
-    peripheral_init();
+
+    peripheral_on();
     _delay_ms(50);
-    
+
     uint8_t hr, min, sec;
     timer_get(&hr, &min, &sec);
     uint16_t volt = ivr_measure();
     int16_t dC = tmp_dC(); // deci centigrade
     history_insert(dC*2/10); // from tenth deg C => double deg C (storing C in int8_t)
-    
+
     uart_putc('\r');
     uart_putc('\n');
     uart_putc('#');
@@ -498,7 +600,7 @@ void main() {
     uart_putc((sec/10) + '0');
     uart_putc((sec%10) + '0');
     uart_putc('s');
-    
+
     /* uart_putc(' '); */
     /* uart_putc(dC < 0 ? '-' : '+'); */
     /* uart_putc(((dC /    1000)%10)+'0'); */
@@ -532,9 +634,9 @@ void main() {
     uart_putc((volt/ 100)%10 + '0');
     uart_putc((volt/  10)%10 + '0');
     uart_putc((volt/   1)%10 + '0');
-    uart_wait(); // don't go to sleep or anything before we're done!      
+    uart_wait(); // don't go to sleep or anything before we're done!
 
-    
+
     /* charmap_putc('#'); */
     /* charmap_putc(((ww/10000000)%10)+'0'); */
     /* charmap_putc(((ww/ 1000000)%10)+'0'); */
@@ -562,15 +664,16 @@ void main() {
     /* charmap_putc((volt/   1)%10 + '0'); */
     /* charmap_putc(' '); */
     /* charmap_putc('\n'); */
-    
+
     epdInit();
-    epdRedraw();
+    epdRedraw(dC, volt);
     epdOff();
 
     uint64_t target = seconds + (60 * 10);
+    peripheral_off(); // turn off eink's power completely
     //target = (target/60)*60;
     while(seconds < target) {
-      _ON(C, 0); _delay_us(800); _OFF(C, 0);
+      _ON(B, 6); _delay_us(800); _OFF(B, 6); // indicator led
       //print_pind();  uart_wait();  _delay_ms(2);
       system_sleep();
     }
