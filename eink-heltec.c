@@ -499,15 +499,32 @@ void main() {
     uart_putc((sec%10) + '0');
     uart_putc('s');
     
+    /* uart_putc(' '); */
+    /* uart_putc(dC < 0 ? '-' : '+'); */
+    /* uart_putc(((dC /    1000)%10)+'0'); */
+    /* uart_putc(((dC /     100)%10)+'0'); */
+    /* uart_putc(((dC /      10)%10)+'0'); */
+    /* uart_putc('.'); */
+    /* uart_putc(((dC /       1)%10)+'0'); */
+    /* uart_putc(0xC2); uart_putc(0xB0);  // ° */
+    /* uart_putc('C'); */
+
     uart_putc(' ');
-    uart_putc(dC < 0 ? '-' : '+');
-    uart_putc(((dC /    1000)%10)+'0');
-    uart_putc(((dC /     100)%10)+'0');
-    uart_putc(((dC /      10)%10)+'0');
-    uart_putc('.');
-    uart_putc(((dC /       1)%10)+'0');
-    uart_putc(0xC2); uart_putc(0xB0);  // °
-    uart_putc('C');
+    uart_putc('@');
+    uart_putc((history_pos/1000)%10 + '0');
+    uart_putc((history_pos/ 100)%10 + '0');
+    uart_putc((history_pos/  10)%10 + '0');
+    uart_putc((history_pos/   1)%10 + '0');
+
+    for(int i = 0 ; i < HISTORY_SIZE ; i++) {
+      int8_t ddeg = history_get(i);
+      uart_putc('\t');
+      uart_putc(ddeg < 0 ? '-' : '+');
+      if(ddeg < 0) ddeg = -ddeg;
+      uart_putc((ddeg/ 100)%10 + '0');
+      uart_putc((ddeg/  10)%10 + '0');
+      uart_putc((ddeg/   1)%10 + '0');
+    }
 
     uart_putc(' ');
     uart_putc('v');
