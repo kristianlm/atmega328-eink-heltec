@@ -4,6 +4,10 @@
 #
 #     avrdude -c atmelice_isp -p m328p -U lfuse:w:0xE2:m
 
+# also, this is the uart command I'm using:
+#
+#     picocom --echo --databits 8 --stopbits 1 --flow n --parity e --baud 9600 /dev/ttyUSB0
+
 flash-write: blink.hex
 	avrdude -B 4Mhz -c atmelice_isp -p m328p -U flash:w:eink-heltec.hex:i
 
