@@ -24,7 +24,7 @@ If you run this code unmodified, it should display the contents of
 
 ## References and sources
 
-I've used [the official data sheet](https://resource.heltec.cn/download/e-ink/213/2.13b%26w%26r/HTEW0213Z16_V13/HTEW0213Z16_V13.pdf). When that one was unclear, I looked at the 
+I've used [the official data sheet](https://resource.heltec.cn/download/e-ink/213/2.13b%26w%26r/QYEG0213RWS800/QYEG0213RWS800F13_V1.2.pdf). When that one was unclear, I looked at the 
 [stm32 example code](https://resource.heltec.cn/download/e-ink/213/2.13b%26w%26r/HTEW0213Z16_V13/E-INK-213-BWR.zip) for some inspiration. This took me 1 day. Things like this
 should really not be that hard!
 
